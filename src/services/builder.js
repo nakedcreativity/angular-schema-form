@@ -90,12 +90,14 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
         for (var i = 0; i < transclusions.length; i++) {
           var n = transclusions[i];
 
-          // The sf-transclude attribute is not a directive, but has the name of what we're supposed to
-          // traverse.
-          var sub = args.form[n.getAttribute('sf-field-transclude')];
-          if (sub) {
-            sub = Array.isArray(sub) ? sub : [sub];
-            var childFrag = args.build(sub, args.path + '.' + sub, args.state);
+          // The sf-transclude attribute is not a directive,
+          // but has the name of what we're supposed to
+          // traverse. Default to `items`
+          var sub = n.getAttribute('sf-field-transclude') || 'items';
+          var items = args.form[sub];
+
+          if (items) {
+            var childFrag = args.build(items, args.path + '.' + sub, args.state);
             n.appendChild(childFrag);
           }
         }
@@ -106,14 +108,14 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
       // but be nice to existing ng-if.
       if (args.form.condition) {
         var evalExpr = 'evalExpr(' + args.path +
-                       '.contidion, { model: model, "arrayIndex": $index})';
+                       '.condition, { model: model, "arrayIndex": $index})';
         if (args.form.key) {
           var strKey = sfPathProvider.stringify(args.form.key);
           evalExpr = 'evalExpr(' + args.path + '.condition,{ model: model, "arrayIndex": $index, ' +
                      '"modelValue": model' + (strKey[0] === '[' ? '' : '.') + strKey + '})';
         }
 
-        var children = args.fieldFrag.children;
+        var children = args.fieldFrag.children || args.fieldFrag.childNodes;
         for (var i = 0; i < children.length; i++) {
           var child = children[i];
           var ngIf = child.getAttribute('ng-if');
@@ -157,6 +159,13 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
     }
   };
   this.builders = builders;
+  var stdBuilders = [
+    builders.sfField,
+    builders.ngModel,
+    builders.ngModelOptions,
+    builders.condition
+  ];
+  this.stdBuilders = stdBuilders;
 
   this.$get = ['$templateCache', 'schemaFormDecorators', 'sfPath', function($templateCache, schemaFormDecorators, sfPath) {
 
@@ -184,7 +193,7 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
 
         // Sanity check.
         if (!f.type) {
-          return;
+          return frag;
         }
 
         var field = decorator[f.type] || decorator['default'];
@@ -209,7 +218,7 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
           //       measure optmization. A good start is probably a cache of DOM nodes for a particular
           //       template that can be cloned instead of using innerHTML
           var div = document.createElement('div');
-          var template = templateFn(field.template) || templateFn([decorator['default'].template]);
+          var template = templateFn(f, field) || templateFn(f, decorator['default']);
           div.innerHTML = template;
 
           // Move node to a document fragment, we don't want the div.
@@ -233,11 +242,14 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
 
           };
 
+          // Let the form definiton override builders if it wants to.
+          var builderFn = f.builder || field.builder;
+
           // Builders are either a function or a list of functions.
-          if (typeof field.builder === 'function') {
-            field.builder(args);
+          if (typeof builderFn === 'function') {
+            builderFn(args);
           } else {
-            field.builder.forEach(function(fn) { fn(args); });
+            builderFn.forEach(function(fn) { fn(args); });
           }
 
           // Append
@@ -254,12 +266,16 @@ angular.module('schemaForm').provider('sfBuilder', ['sfPathProvider', function(s
        * Builds a form from a canonical form definition
        */
       build: function(form, decorator, slots, lookup) {
-        return build(form, decorator, function(url) {
-          return $templateCache.get(url);
+        return build(form, decorator, function(form, field) {
+          if (form.type === 'template') {
+            return form.template;
+          }
+          return $templateCache.get(field.template);
         }, slots, undefined, undefined, lookup);
 
       },
       builder: builders,
+      stdBuilders: stdBuilders,
       internalBuild: build
     };
   }];
