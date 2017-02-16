@@ -24,11 +24,13 @@ angular.module('schemaForm').directive('schemaValidate', ['sfValidator', '$parse
               sfSelect(path, scope.model, ngModel.$modelValue);
             });
           });
-        }
+        };
+
 
         // Validate against the schema.
 
         var validate = function(viewValue) {
+          //console.log('validate called', viewValue)
           //Still might be undefined
           if (!form) {
             return viewValue;
@@ -40,7 +42,7 @@ angular.module('schemaForm').directive('schemaValidate', ['sfValidator', '$parse
           }
 
           var result =  sfValidator.validate(form, viewValue);
-
+          //console.log('result is', result)
           // Since we might have different tv4 errors we must clear all
           // errors that start with tv4-
           Object.keys(ngModel.$error)
@@ -95,6 +97,7 @@ angular.module('schemaForm').directive('schemaValidate', ['sfValidator', '$parse
         // updating if we've found an error.
         if (ngModel.$validators) {
           ngModel.$validators.schemaForm = function() {
+            //console.log('validators called.')
             // Any error and we're out of here!
             return !Object.keys(ngModel.$error).some(function(e) { return e !== 'schemaForm';});
           };
@@ -103,7 +106,13 @@ angular.module('schemaForm').directive('schemaValidate', ['sfValidator', '$parse
         var schema = form.schema;
 
         // A bit ugly but useful.
-        scope.validateField =  function() {
+        scope.validateField =  function(formName) {
+          
+          // If we have specified a form name, and this model is not within 
+          // that form, then leave things be.
+          if(formName != undefined && ngModel.$$parentForm.$name !== formName) {
+            return;
+          }
 
           // Special case: arrays
           // TODO: Can this be generalized in a way that works consistently?
@@ -138,8 +147,21 @@ angular.module('schemaForm').directive('schemaValidate', ['sfValidator', '$parse
           }
         };
 
+        ngModel.$formatters.push(function(val) {
+          // When a form first loads this will be called for each field.
+          // we usually don't want that.
+          if (ngModel.$pristine  && scope.firstDigest &&
+              (!scope.options || scope.options.validateOnRender !== true))  {
+            return val;
+          }
+          validate(ngModel.$modelValue);
+          return val;
+        });
+
         // Listen to an event so we can validate the input on request
-        scope.$on('schemaFormValidate', scope.validateField);
+        scope.$on('schemaFormValidate', function(event, formName) {
+          scope.validateField(formName);
+        });
 
         scope.schemaError = function() {
           return error;
