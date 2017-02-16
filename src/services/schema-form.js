@@ -365,9 +365,9 @@ angular.module('schemaForm').provider('schemaForm',
         }
 
         // Are we inheriting readonly?
-        if (readonly === true) { // Inheriting false is not cool.
-          obj.readonly = true;
-        }
+        //if (readonly === true) { // Inheriting false is not cool.
+          obj.readonly = readonly;
+        //}
 
         //if it's a type with items, merge 'em!
         if (obj.items) {
